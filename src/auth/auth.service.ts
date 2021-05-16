@@ -1,11 +1,14 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { CreateUserDto } from './dto/create-user.dto';
-import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { connection, Connection, Document, Model } from 'mongoose';
-import { UserSchema, UserDocument, User } from '../models/user.schema';
-import { HttpException } from '@nestjs/common';
-import { HttpStatus } from '@nestjs/common';
+import { InjectConnection } from '@nestjs/mongoose';
+import { connection, Connection } from 'mongoose';
+import { User, UserSchema } from '../models/user.schema';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
@@ -16,48 +19,58 @@ export class AuthService {
   ) {}
 
   async registration(dto: CreateUserDto) {
-    const db = await AuthService.connectToUser(connection);
-    const User = db.model('User', UserSchema);
+    try {
+      const db = await AuthService.connectToUser(connection);
+      const User = db.model('User', UserSchema);
 
-    const candidate = await User.findOne({
-      name: dto.name,
-    }).exec();
+      const candidate = await User.findOne({
+        name: dto.name,
+      }).exec();
 
-    console.log(candidate);
+      console.log(candidate);
 
-    if (candidate) {
-      throw new HttpException(
-        'User with this email has already exist',
-        HttpStatus.BAD_REQUEST,
-      );
+      if (candidate) {
+        throw new HttpException(
+          'User with this email has already exist',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      const hashPassword = await bcrypt.hash(dto.password, 5);
+      const user: any = await User.create({
+        ...dto,
+        password: hashPassword,
+      });
+
+      return this.generateToken(user);
+    } catch (e) {
+      throw new HttpException(e.message, e.status);
     }
-    const hashPassword = await bcrypt.hash(dto.password, 5);
-    const user: any = await User.create({
-      ...dto,
-      password: hashPassword,
-    });
-
-    return this.generateToken(user);
   }
 
   async login(userDto: CreateUserDto) {
-    const db = await AuthService.connectToUser(connection);
-    const User = db.model('User', UserSchema);
+    try {
+      const db = await AuthService.connectToUser(connection);
+      const User = db.model('User', UserSchema);
 
-    const user: any = await User.findOne({ name: userDto.name }).exec();
-    if (!user) {
-      throw new HttpException(
-        'User with this username does not exist',
-        HttpStatus.NOT_FOUND,
+      const user: any = await User.findOne({ name: userDto.name }).exec();
+      if (!user) {
+        throw new HttpException(
+          'User with this username does not exist',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      const passwordEquals = await bcrypt.compare(
+        userDto.password,
+        user.password,
       );
-    }
-    const passwordEquals = await bcrypt.compare(
-      userDto.password,
-      user.password,
-    );
 
-    if (passwordEquals) return this.generateToken(user);
-    throw new UnauthorizedException({ message: 'Incorrect name or password' });
+      if (passwordEquals) return this.generateToken(user);
+      throw new UnauthorizedException({
+        message: 'Incorrect name or password',
+      });
+    } catch (e) {
+      throw new HttpException(e.message, e.status);
+    }
   }
 
   private async generateToken(user: any) {
@@ -70,13 +83,11 @@ export class AuthService {
   private static async connectToUser(connection: Connection) {
     await connection.close();
 
-    const db = await connection.openUri(process.env.HOST + 'users', {
+    return await connection.openUri(process.env.HOST + 'users', {
       useCreateIndex: true,
       useFindAndModify: false,
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
-
-    return db;
   }
 }
