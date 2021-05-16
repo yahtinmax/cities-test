@@ -1,7 +1,7 @@
 import { Body, Post } from '@nestjs/common';
 import { Controller, Get, Param } from '@nestjs/common';
 import { CitiesService } from './cities.service';
-import { SightsDto } from './dto';
+import { SightsDto } from './dto/create-city.dto';
 import { Roles } from 'src/auth/roles.decorator';
 import { UseGuards } from '@nestjs/common';
 import { RolesGuard } from 'src/auth/roles.guard';
